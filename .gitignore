@@ -1,0 +1,43 @@
+# Built artifacts and Gradle directories
+.gradle/
+.kotlin/
+/build/
+app/build/
+.externalNativeBuild/
+.cxx/
+build/
+bin/
+gen/
+
+# Secrets and environment configurations
+.env
+.env.local
+.env.*.local
+local.properties
+google-services.json
+
+# Signing configurations and Keystore files
+*.jks
+*.keystore
+debug.keystore.base64
+*.p12
+*.pem
+private_key*
+
+# IDE settings and workspace caches
+.idea/
+*.iml
+*.ipr
+*.iws
+.settings/
+.vscode/
+
+# Capture and diagnostic logs
+captures/
+*.log
+.build-outputs/
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+Desktop.ini
