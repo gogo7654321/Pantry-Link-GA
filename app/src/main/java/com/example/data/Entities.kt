@@ -17,8 +17,8 @@ data class FoodBankEntity(
     val phone: String,
     val email: String,
     val verified: Boolean = true,
-    val size: String = "Medium (100-500/wk)",
-    val operatingHours: String = "Mon-Fri 9 AM - 5 PM",
+    val size: String = "",
+    val operatingHours: String = "",
     val coldStorage: Boolean = false
 )
 

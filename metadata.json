@@ -1,6 +1,1 @@
-{
-  "name": "PantryLink Georgia",
-  "description": "Connecting Georgia communities with local food banks and pantries. Real-time request tracking, claims, and location matching.",
-  "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}
+{"name":"PantryLink Georgia","description":"Connecting Georgia communities with local food banks and pantries. Real-time request tracking, claims, and location matching.","requestFramePermissions":[],"majorCapabilities":["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]}

@@ -41,3 +41,6 @@ captures/
 .DS_Store
 Thumbs.db
 Desktop.ini
+
+# Antigravity agent files
+.antigravity/

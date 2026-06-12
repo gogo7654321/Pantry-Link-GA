@@ -2,6 +2,9 @@ package com.example.ui
 
 import androidx.compose.animation.*
 import androidx.compose.animation.core.spring
+import coil.compose.AsyncImage
+import androidx.compose.foundation.Image
+import androidx.compose.ui.res.painterResource
 import androidx.compose.animation.core.Spring
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -68,6 +71,8 @@ import androidx.compose.ui.platform.LocalAutofill
 import androidx.compose.ui.platform.LocalAutofillTree
 import java.text.SimpleDateFormat
 import java.util.*
+import androidx.compose.ui.tooling.preview.Preview
+import com.example.ui.theme.MyApplicationTheme
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -82,6 +87,12 @@ fun PantryLinkAppScreen(viewModel: PantryLinkViewModel) {
         TermsOfServiceDialog(onDismiss = { showTermsDialog = false })
     }
 
+    val showWelcomeRewardsDialog by viewModel.showWelcomeRewardsDialog.collectAsStateWithLifecycle()
+
+    if (showWelcomeRewardsDialog) {
+        WelcomeRewardsDialog(onDismiss = { viewModel.dismissWelcomeRewardsDialog() })
+    }
+
     Box(modifier = Modifier.fillMaxSize()) {
         // Host Scaffold
         Scaffold(
@@ -92,20 +103,14 @@ fun PantryLinkAppScreen(viewModel: PantryLinkViewModel) {
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Surface(
-                                shape = RoundedCornerShape(10.dp),
-                                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
-                                modifier = Modifier.size(36.dp)
-                            ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Icon(
-                                        imageVector = Icons.Default.Favorite,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.tertiary,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                }
-                            }
+                            Image(
+                                painter = painterResource(id = com.example.R.drawable.app_logo),
+                                contentDescription = "PantryLink Logo",
+                                modifier = Modifier
+                                    .size(46.dp)
+                                    .clip(RoundedCornerShape(10.dp)),
+                                contentScale = androidx.compose.ui.layout.ContentScale.Fit
+                            )
                             Column {
                                 Text(
                                     text = "PantryLink",
@@ -143,15 +148,51 @@ fun PantryLinkAppScreen(viewModel: PantryLinkViewModel) {
                         }
 
                         if (userSession != null) {
-                            // Pill selector for Simulator roles and Sign Out icon
+                            // Read-only status badge reflecting the active logged-in user profile role
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(4.dp)
                             ) {
-                                RoleSelector(
-                                    selectedRole = selectedRole,
-                                    onRoleSelected = { viewModel.setRole(it) }
-                                )
+                                Surface(
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = if (selectedRole == "Donor") {
+                                        MaterialTheme.colorScheme.primaryContainer
+                                    } else {
+                                        MaterialTheme.colorScheme.tertiaryContainer
+                                    },
+                                    modifier = Modifier.padding(end = 8.dp)
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = if (selectedRole == "Donor") {
+                                                Icons.Default.VolunteerActivism
+                                            } else {
+                                                Icons.Default.MapsHomeWork
+                                            },
+                                            contentDescription = null,
+                                            tint = if (selectedRole == "Donor") {
+                                                MaterialTheme.colorScheme.onPrimaryContainer
+                                            } else {
+                                                MaterialTheme.colorScheme.onTertiaryContainer
+                                            },
+                                            modifier = Modifier.size(13.dp)
+                                        )
+                                        Text(
+                                            text = selectedRole,
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = if (selectedRole == "Donor") {
+                                                MaterialTheme.colorScheme.onPrimaryContainer
+                                            } else {
+                                                MaterialTheme.colorScheme.onTertiaryContainer
+                                            }
+                                        )
+                                    }
+                                }
 
                                 IconButton(
                                     onClick = { viewModel.signOutUser() },
@@ -469,6 +510,12 @@ fun DonorDashboardTab(viewModel: PantryLinkViewModel, onBrowseClick: () -> Unit)
     val requests by viewModel.requestsState.collectAsStateWithLifecycle()
     val foodBanks by viewModel.foodBanksState.collectAsStateWithLifecycle()
     val claims by viewModel.claimsState.collectAsStateWithLifecycle()
+    val userSession by viewModel.userSession.collectAsStateWithLifecycle()
+    val currentUserProfile by viewModel.currentUserProfile.collectAsStateWithLifecycle()
+
+    val activeEmail = userSession?.email ?: ""
+    val profileName = currentUserProfile?.get("name") as? String
+    val userName = if (!profileName.isNullOrBlank()) profileName else activeEmail.substringBefore("@").replaceFirstChar { it.uppercase() }
 
     val openRequests = requests.filter { it.status != "Closed" && it.status != "Confirmed by Food Bank" }
     val urgentRequests = openRequests.take(3)
@@ -499,7 +546,7 @@ fun DonorDashboardTab(viewModel: PantryLinkViewModel, onBrowseClick: () -> Unit)
             ) {
                 Column(modifier = Modifier.padding(24.dp)) {
                     Text(
-                        text = "Hello, Neil Patel!",
+                        text = "Hello, $userName!",
                         fontWeight = FontWeight.ExtraBold,
                         fontSize = 22.sp,
                         color = Color.White
@@ -1375,23 +1422,19 @@ fun DonorMapTab(viewModel: PantryLinkViewModel) {
                                 modifier = Modifier
                                     .size(38.dp)
                                     .background(
-                                        brush = androidx.compose.ui.graphics.Brush.linearGradient(
-                                            colors = listOf(
-                                                MaterialTheme.colorScheme.primary,
-                                                MaterialTheme.colorScheme.tertiary
-                                            )
-                                        ),
+                                        color = Color.White,
                                         shape = RoundedCornerShape(12.dp)
                                     )
-                                    .border(2.dp, Color.White, RoundedCornerShape(12.dp))
-                                    .padding(4.dp),
+                                    .border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(12.dp)),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Icon(
-                                    imageVector = Icons.Default.Favorite,
+                                Image(
+                                    painter = painterResource(id = com.example.R.drawable.app_logo),
                                     contentDescription = bank.name,
-                                    tint = Color.White,
-                                    modifier = Modifier.size(18.dp)
+                                    modifier = Modifier
+                                        .size(34.dp)
+                                        .clip(RoundedCornerShape(10.dp)),
+                                    contentScale = androidx.compose.ui.layout.ContentScale.Fit
                                 )
                             }
                             // Small map pin triangle pointing exactly at coordinates
@@ -1490,7 +1533,7 @@ fun DonorMapTab(viewModel: PantryLinkViewModel) {
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                     Icon(imageVector = Icons.Default.Schedule, contentDescription = "Hours", tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.size(13.dp))
-                                    Text(text = if (bank.operatingHours.isNotBlank()) bank.operatingHours else "Mon-Fri 9 AM - 5 PM", fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                                    Text(text = if (bank.operatingHours.isNotBlank()) bank.operatingHours else "Not Specified", fontSize = 12.sp, fontWeight = FontWeight.Medium)
                                 }
                                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                     Icon(imageVector = Icons.Default.CheckCircle, contentDescription = "Cold Storage", tint = if (bank.coldStorage) Color(0xFF2E7D32) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f), modifier = Modifier.size(13.dp))
@@ -1503,7 +1546,7 @@ fun DonorMapTab(viewModel: PantryLinkViewModel) {
                             // Row 3: Organizational Size capacity
                             Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                 Icon(imageVector = Icons.Default.Info, contentDescription = "Classification Scale", tint = MaterialTheme.colorScheme.tertiary, modifier = Modifier.size(13.dp))
-                                Text(text = "Agency Capacity Classification: ${if (bank.size.isNotBlank()) bank.size else "Medium"}", fontSize = 11.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(text = "Agency Capacity Classification: ${if (bank.size.isNotBlank()) bank.size else "Not Specified"}", fontSize = 11.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
                     }
@@ -1598,6 +1641,66 @@ fun DonorMapTab(viewModel: PantryLinkViewModel) {
     }
 }
 
+data class BadgeInfo(
+    val title: String,
+    val containerColor: Color,
+    val textColor: Color,
+    val acceptedRequired: Int,
+    val nextBadgeTitle: String?,
+    val nextBadgeRequired: Int?,
+    val badgeIcon: androidx.compose.ui.graphics.vector.ImageVector
+)
+
+fun getBadgeInfo(acceptedCount: Int): BadgeInfo {
+    return when {
+        acceptedCount >= 25 -> BadgeInfo(
+            title = "Hunger Hero",
+            containerColor = Color(0xFFFEE2E2), // Red-100
+            textColor = Color(0xFFB91C1C), // Red-700
+            acceptedRequired = 25,
+            nextBadgeTitle = null,
+            nextBadgeRequired = null,
+            badgeIcon = Icons.Default.ThumbUp
+        )
+        acceptedCount >= 10 -> BadgeInfo(
+            title = "Vetted Community Donor",
+            containerColor = Color(0xFFD1FAE5), // Emerald-100
+            textColor = Color(0xFF047857), // Emerald-700
+            acceptedRequired = 10,
+            nextBadgeTitle = "Hunger Hero",
+            nextBadgeRequired = 25,
+            badgeIcon = Icons.Default.Verified
+        )
+        acceptedCount >= 5 -> BadgeInfo(
+            title = "Generous Giver",
+            containerColor = Color(0xFFE0F2FE), // Sky-100
+            textColor = Color(0xFF0369A1), // Sky-700
+            acceptedRequired = 5,
+            nextBadgeTitle = "Vetted Community Donor",
+            nextBadgeRequired = 10,
+            badgeIcon = Icons.Default.Favorite
+        )
+        acceptedCount >= 1 -> BadgeInfo(
+            title = "Kind Contributor",
+            containerColor = Color(0xFFE0E7FF), // Indigo-100
+            textColor = Color(0xFF4338CA), // Indigo-700
+            acceptedRequired = 1,
+            nextBadgeTitle = "Generous Giver",
+            nextBadgeRequired = 5,
+            badgeIcon = Icons.Default.VolunteerActivism
+        )
+        else -> BadgeInfo(
+            title = "Pantry Pioneer",
+            containerColor = Color(0xFFF1F5F9), // Slate-100
+            textColor = Color(0xFF475569), // Slate-700
+            acceptedRequired = 0,
+            nextBadgeTitle = "Kind Contributor",
+            nextBadgeRequired = 1,
+            badgeIcon = Icons.Default.Star
+        )
+    }
+}
+
 @Composable
 fun DonorClaimsTab(viewModel: PantryLinkViewModel) {
     val claims by viewModel.claimsState.collectAsStateWithLifecycle()
@@ -1605,13 +1708,18 @@ fun DonorClaimsTab(viewModel: PantryLinkViewModel) {
     val userSession by viewModel.userSession.collectAsStateWithLifecycle()
     val currentUserProfile by viewModel.currentUserProfile.collectAsStateWithLifecycle()
 
-    val activeEmail = userSession?.email ?: "npatel012010@gmail.com"
+    val acceptedCount = claims.count { it.claimStatus == "Accepted" }
+    val badgeInfo = getBadgeInfo(acceptedCount)
+
+    val activeEmail = userSession?.email ?: ""
     val profileName = currentUserProfile?.get("name") as? String
     val userName = if (!profileName.isNullOrBlank()) profileName else activeEmail.substringBefore("@").replaceFirstChar { it.uppercase() }
     val userInitials = if (userName.length >= 2) userName.take(2).uppercase() else "PL"
 
     // Edit states for user profile
     var isEditingProfile by remember { mutableStateOf(false) }
+    var showDeleteConfirmation by remember { mutableStateOf(false) }
+    var deleteAccountError by remember { mutableStateOf<String?>(null) }
     var editFirstName by remember { mutableStateOf("") }
     var editLastName by remember { mutableStateOf("") }
     var editPhone by remember { mutableStateOf("") }
@@ -1810,6 +1918,66 @@ fun DonorClaimsTab(viewModel: PantryLinkViewModel) {
     val emailEnabled by viewModel.emailNotificationsEnabled.collectAsStateWithLifecycle()
     val smsEnabled by viewModel.smsNotificationsEnabled.collectAsStateWithLifecycle()
 
+    if (showDeleteConfirmation) {
+        AlertDialog(
+            onDismissRequest = { 
+                showDeleteConfirmation = false 
+                deleteAccountError = null
+            },
+            title = {
+                Text(
+                    text = "Delete Account Permanently",
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.error
+                )
+            },
+            text = {
+                Column {
+                    Text(
+                        text = "Are you sure you want to delete your PantryLink account? This action is irreversible. All of your claims and profile details will be permanently deleted.",
+                        fontSize = 14.sp
+                    )
+                    deleteAccountError?.let { errorMsg ->
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = errorMsg,
+                            color = MaterialTheme.colorScheme.error,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.deleteUserAccount { success, errorMsg ->
+                            if (success) {
+                                showDeleteConfirmation = false
+                                deleteAccountError = null
+                            } else {
+                                deleteAccountError = errorMsg
+                            }
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Delete My Account", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { 
+                        showDeleteConfirmation = false 
+                        deleteAccountError = null
+                    }
+                ) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
@@ -1857,12 +2025,12 @@ fun DonorClaimsTab(viewModel: PantryLinkViewModel) {
                                         color = MaterialTheme.colorScheme.onSurface
                                     )
                                     Icon(
-                                        imageVector = Icons.Default.Verified,
-                                        contentDescription = "Verified Contributor Badge",
-                                        tint = Color(0xFF10B981),
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                }
+                                         imageVector = badgeInfo.badgeIcon,
+                                         contentDescription = "Verified Contributor Badge",
+                                         tint = badgeInfo.textColor,
+                                         modifier = Modifier.size(16.dp)
+                                     )
+                                 }
                                 Text(
                                     text = activeEmail,
                                     fontSize = 13.sp,
@@ -1870,18 +2038,29 @@ fun DonorClaimsTab(viewModel: PantryLinkViewModel) {
                                 )
                                 Spacer(modifier = Modifier.height(4.dp))
                                 Surface(
-                                    shape = RoundedCornerShape(6.dp),
-                                    color = Color(0xFFECFDF5),
-                                    modifier = Modifier.wrapContentSize()
-                                ) {
-                                    Text(
-                                        text = "VETTED COMMUNITY DONOR",
-                                        fontSize = 9.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = Color(0xFF047857),
-                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                    )
-                                }
+                                     shape = RoundedCornerShape(6.dp),
+                                     color = badgeInfo.containerColor,
+                                     modifier = Modifier.wrapContentSize()
+                                 ) {
+                                     Row(
+                                         modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.5.dp),
+                                         verticalAlignment = Alignment.CenterVertically,
+                                         horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                     ) {
+                                         Icon(
+                                             imageVector = badgeInfo.badgeIcon,
+                                             contentDescription = null,
+                                             tint = badgeInfo.textColor,
+                                             modifier = Modifier.size(11.dp)
+                                         )
+                                         Text(
+                                             text = badgeInfo.title.uppercase(),
+                                             fontSize = 9.sp,
+                                             fontWeight = FontWeight.Bold,
+                                             color = badgeInfo.textColor
+                                         )
+                                     }
+                                 }
                             }
                         }
 
@@ -2304,10 +2483,136 @@ fun DonorClaimsTab(viewModel: PantryLinkViewModel) {
                                 Text("Save Changes", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                             }
                         }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+                        TextButton(
+                            onClick = { showDeleteConfirmation = true },
+                            modifier = Modifier.fillMaxWidth().height(40.dp).testTag("donor_delete_account_btn"),
+                            colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                        ) {
+                            Icon(Icons.Default.Delete, null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Delete Account Permanently", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                        }
                     }
                 }
             }
         }
+
+        // --- SECTION 1.5: DONATION PROGRESSION & REWARDS MILESTONE ---
+        if (!isEditingProfile) {
+            item {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    shape = RoundedCornerShape(24.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE2E8F0)),
+                    elevation = CardDefaults.cardElevation(1.dp),
+                    modifier = Modifier.fillMaxWidth().testTag("rewards_progression_card")
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Surface(
+                                shape = CircleShape,
+                                color = badgeInfo.containerColor,
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = badgeInfo.badgeIcon,
+                                        contentDescription = "Milestone Icon",
+                                        tint = badgeInfo.textColor,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            }
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Donation Badges & Level",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.secondary
+                                )
+                                Text(
+                                    text = badgeInfo.title,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontSize = 16.sp,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                            
+                            // Status info showing current accepted donations count
+                            Surface(
+                                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Text(
+                                    text = "$acceptedCount confirmed",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                                )
+                            }
+                        }
+                        
+                        Spacer(modifier = Modifier.height(14.dp))
+                        
+                        if (badgeInfo.nextBadgeTitle != null && badgeInfo.nextBadgeRequired != null) {
+                            val prevRequired = badgeInfo.acceptedRequired
+                            val targetRequired = badgeInfo.nextBadgeRequired
+                            val range = targetRequired - prevRequired
+                            val progressInRange = acceptedCount - prevRequired
+                            val progressFraction = progressInRange.toFloat() / range.toFloat()
+                            
+                            LinearProgressIndicator(
+                                progress = { progressFraction.coerceIn(0f, 1f) },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(8.dp)
+                                    .clip(RoundedCornerShape(4.dp)),
+                                color = badgeInfo.textColor,
+                                trackColor = Color(0xFFF1F5F9)
+                            )
+                            
+                            Spacer(modifier = Modifier.height(8.dp))
+                            
+                            val remaining = targetRequired - acceptedCount
+                            Text(
+                                text = "Deliver $remaining more verified supply drop-off${if (remaining > 1) "s" else ""} to unlock ${badgeInfo.nextBadgeTitle}!",
+                                fontSize = 11.5.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = Color(0xFF64748B)
+                            )
+                        } else {
+                            // Max tier!
+                            LinearProgressIndicator(
+                                progress = { 1f },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(8.dp)
+                                    .clip(RoundedCornerShape(4.dp)),
+                                color = Color(0xFFB91C1C),
+                                trackColor = Color(0xFFFEE2E2)
+                            )
+                            
+                            Spacer(modifier = Modifier.height(8.dp))
+                            
+                            Text(
+                                text = "Maximum tier reached! You are an active Hunger Hero, directly sustaining local families in Georgia.",
+                                fontSize = 11.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFFB91C1C)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+
 
         // --- SECTION 2: NOTIFICATION SETTINGS CARD ---
         item {
@@ -3917,6 +4222,7 @@ fun PantryLinkAuthGateScreen(viewModel: PantryLinkViewModel, onViewTerms: () -> 
     var role by rememberSaveable { mutableStateOf("Donor") } // "Donor" or "Food Bank"
     var loading by rememberSaveable { mutableStateOf(false) }
     var errorMessage by rememberSaveable { mutableStateOf<String?>(null) }
+    val diagnosticsState by viewModel.diagnosticsState.collectAsStateWithLifecycle()
     val rolesSelectionList = listOf("Donor", "Food Bank")
 
     val scrollState = androidx.compose.foundation.rememberScrollState()
@@ -3926,7 +4232,7 @@ fun PantryLinkAuthGateScreen(viewModel: PantryLinkViewModel, onViewTerms: () -> 
     var fbAddress by rememberSaveable { mutableStateOf("") }
     var fbCity by rememberSaveable { mutableStateOf("") }
     var fbZip by rememberSaveable { mutableStateOf("") }
-    var fbSize by rememberSaveable { mutableStateOf("Medium (100-500/wk)") }
+    var fbSize by rememberSaveable { mutableStateOf("") }
 
     // Google Places Search-As-You-Type Autocomplete components
     var showFbAddressSuggestions by rememberSaveable { mutableStateOf(false) }
@@ -3936,6 +4242,10 @@ fun PantryLinkAuthGateScreen(viewModel: PantryLinkViewModel, onViewTerms: () -> 
 
     val placesApiKey = BuildConfig.PLACES_API_KEY
     val isApiKeyPresent = GooglePlacesClient.isApiKeyValid(placesApiKey)
+
+    diagnosticsState?.let { report ->
+        DiagnosticsDialog(report = report, onDismiss = { viewModel.clearDiagnostics() })
+    }
 
     LaunchedEffect(fbAddress, showFbAddressSuggestions) {
         if (fbAddress.isBlank() || !showFbAddressSuggestions) {
@@ -4075,15 +4385,18 @@ fun PantryLinkAuthGateScreen(viewModel: PantryLinkViewModel, onViewTerms: () -> 
                 // Circular Hospitality Logo icon
                 Surface(
                     shape = CircleShape,
-                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f),
-                    modifier = Modifier.size(64.dp)
+                    color = Color.White,
+                    modifier = Modifier.size(150.dp),
+                    shadowElevation = 2.dp
                 ) {
                     Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            imageVector = if (isSignUp) Icons.Default.AppRegistration else Icons.Default.AccountCircle,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(32.dp)
+                        Image(
+                            painter = painterResource(id = com.example.R.drawable.app_logo),
+                            contentDescription = "PantryLink Logo",
+                            modifier = Modifier
+                                .size(138.dp)
+                                .clip(CircleShape),
+                            contentScale = androidx.compose.ui.layout.ContentScale.Fit
                         )
                     }
                 }
@@ -5086,6 +5399,22 @@ fun PantryLinkAuthGateScreen(viewModel: PantryLinkViewModel, onViewTerms: () -> 
                             modifier = Modifier.clickable { onViewTerms() }
                         )
                     }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+                    HorizontalDivider(color = Color(0xFFF1F5F9))
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    TextButton(
+                        onClick = { viewModel.runDiagnostics() },
+                        modifier = Modifier
+                            .align(Alignment.CenterHorizontally)
+                            .testTag("auth_diagnostics_button"),
+                        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.tertiary)
+                    ) {
+                        Icon(Icons.Default.Build, null, modifier = Modifier.size(14.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Run Connection Diagnostics", fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
+                    }
                 }
             }
         }
@@ -5259,17 +5588,19 @@ fun FBProfileTab(viewModel: PantryLinkViewModel) {
     val userSession by viewModel.userSession.collectAsStateWithLifecycle()
     val currentUserProfile by viewModel.currentUserProfile.collectAsStateWithLifecycle()
 
-    val activeEmail = userSession?.email ?: "npatel012010@gmail.com"
+    val activeEmail = userSession?.email ?: ""
     var fbName by remember { mutableStateOf("") }
     var fbPhone by remember { mutableStateOf("") }
     var fbAddress by remember { mutableStateOf("") }
     var fbCity by remember { mutableStateOf("") }
     var fbZip by remember { mutableStateOf("") }
-    var fbSize by remember { mutableStateOf("Medium (100-500/wk)") }
-    var fbHours by remember { mutableStateOf("Mon-Fri 9 AM - 5 PM") }
+    var fbSize by remember { mutableStateOf("") }
+    var fbHours by remember { mutableStateOf("") }
     var fbColdStorage by remember { mutableStateOf(false) }
 
     var isInitialized by remember { mutableStateOf(false) }
+    var showDeleteConfirmation by remember { mutableStateOf(false) }
+    var deleteAccountError by remember { mutableStateOf<String?>(null) }
 
     var showFbAddressSuggestions by remember { mutableStateOf(false) }
     var addressSearchLoading by remember { mutableStateOf(false) }
@@ -5370,11 +5701,71 @@ fun FBProfileTab(viewModel: PantryLinkViewModel) {
             fbAddress = currentUserProfile?.get("fbAddress") as? String ?: ""
             fbCity = currentUserProfile?.get("fbCity") as? String ?: ""
             fbZip = currentUserProfile?.get("fbZip") as? String ?: ""
-            fbSize = currentUserProfile?.get("fbSize") as? String ?: "Medium (100-500/wk)"
-            fbHours = currentUserProfile?.get("fbHours") as? String ?: "Mon-Fri 9 AM - 5 PM"
+            fbSize = currentUserProfile?.get("fbSize") as? String ?: ""
+            fbHours = currentUserProfile?.get("fbHours") as? String ?: ""
             fbColdStorage = currentUserProfile?.get("fbColdStorage") as? Boolean ?: false
             isInitialized = true
         }
+    }
+
+    if (showDeleteConfirmation) {
+        AlertDialog(
+            onDismissRequest = { 
+                showDeleteConfirmation = false 
+                deleteAccountError = null
+            },
+            title = {
+                Text(
+                    text = "Delete Account Permanently",
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.error
+                )
+            },
+            text = {
+                Column {
+                    Text(
+                        text = "Are you sure you want to delete your Food Bank Agency account? This action is irreversible. Your profile, public map location, and requests will be permanently deleted.",
+                        fontSize = 14.sp
+                    )
+                    deleteAccountError?.let { errorMsg ->
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = errorMsg,
+                            color = MaterialTheme.colorScheme.error,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.deleteUserAccount { success, errorMsg ->
+                            if (success) {
+                                showDeleteConfirmation = false
+                                deleteAccountError = null
+                            } else {
+                                deleteAccountError = errorMsg
+                            }
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Delete My Account", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { 
+                        showDeleteConfirmation = false 
+                        deleteAccountError = null
+                    }
+                ) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 
     LazyColumn(
@@ -5730,8 +6121,313 @@ fun FBProfileTab(viewModel: PantryLinkViewModel) {
                         Spacer(modifier = Modifier.width(6.dp))
                         Text("Save Profile Changes", fontWeight = FontWeight.Bold, fontSize = 13.sp)
                     }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    TextButton(
+                        onClick = { showDeleteConfirmation = true },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(40.dp)
+                            .testTag("fb_delete_account_btn"),
+                        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                    ) {
+                        Icon(Icons.Default.Delete, null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Delete Account Permanently", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    }
                 }
             }
+        }
+
+
+    }
+}
+
+@Composable
+fun DiagnosticsDialog(
+    report: List<DiagnosticItem>,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Build,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary
+                )
+                Text(
+                    text = "Connection Diagnostics",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp
+                )
+            }
+        },
+        text = {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    text = "Testing connections to authentication, databases, and APIs for development and verification purposes:",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                
+                report.forEach { item ->
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                        ),
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .padding(10.dp)
+                                .fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            when (item.status) {
+                                "PENDING" -> {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(16.dp),
+                                        strokeWidth = 2.dp,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                                "SUCCESS" -> {
+                                    Icon(
+                                        imageVector = Icons.Default.CheckCircle,
+                                        contentDescription = "Success",
+                                        tint = Color(0xFF2E7D32),
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                                "FAILURE" -> {
+                                    Icon(
+                                        imageVector = Icons.Default.Error,
+                                        contentDescription = "Failed",
+                                        tint = MaterialTheme.colorScheme.error,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            }
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = item.name,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = item.message,
+                                    fontSize = 11.sp,
+                                    color = if (item.status == "FAILURE") MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(onClick = onDismiss) {
+                Text("Close", fontWeight = FontWeight.Bold)
+            }
+        }
+    )
+}
+
+@Composable
+fun WelcomeRewardsDialog(onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Surface(
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f),
+                    modifier = Modifier.size(36.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Default.Star,
+                            contentDescription = "Rewards Icon",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+                Column {
+                    Text(
+                        text = "PantryLink Rewards! 🎉",
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 17.sp,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        text = "Every donation makes a difference",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                    )
+                }
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = "Thank you for joining PantryLink! To celebrate your contributions to Georgia communities, we've launched a gamified reward system. As a welcome gift, we have granted you your first official account tag!",
+                    fontSize = 13.sp,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                
+                Surface(
+                    color = Color(0xFFF1F5F9), // Slate-100
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Surface(
+                            shape = CircleShape,
+                            color = Color(0xFFE2E8F0),
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(Icons.Default.Star, contentDescription = "Star", tint = Color(0xFF475569), modifier = Modifier.size(16.dp))
+                            }
+                        }
+                        Column {
+                            Text(
+                                text = "Free Starting Tag Awarded!",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF475569)
+                            )
+                            Text(
+                                text = "Pantry Pioneer",
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = Color(0xFF1E293B)
+                            )
+                        }
+                    }
+                }
+
+                Text(
+                    text = "Unlock higher tier badges on your profile by dropping off verified supplies at local food banks:",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.secondary
+                )
+
+                val tiers = listOf(
+                    Triple("Pantry Pioneer", "0 donations", Color(0xFF475569) to Color(0xFFF1F5F9)),
+                    Triple("Kind Contributor", "1+ donations", Color(0xFF4338CA) to Color(0xFFE0E7FF)),
+                    Triple("Generous Giver", "5+ donations", Color(0xFF0369A1) to Color(0xFFE0F2FE)),
+                    Triple("Vetted Community Donor", "10+ donations", Color(0xFF047857) to Color(0xFFD1FAE5)),
+                    Triple("Hunger Hero", "25+ donations", Color(0xFFB91C1C) to Color(0xFFFEE2E2))
+                )
+
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    tiers.forEach { (name, desc, colors) ->
+                        val (textColor, bgColor) = colors
+                        val icon = when (name) {
+                            "Pantry Pioneer" -> Icons.Default.Star
+                            "Kind Contributor" -> Icons.Default.VolunteerActivism
+                            "Generous Giver" -> Icons.Default.Favorite
+                            "Vetted Community Donor" -> Icons.Default.Verified
+                            else -> Icons.Default.ThumbUp
+                        }
+                        
+                        Surface(
+                            color = MaterialTheme.colorScheme.surface,
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE2E8F0)),
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = icon,
+                                        contentDescription = name,
+                                        tint = textColor,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Text(
+                                        text = name,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 12.sp,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+                                Surface(
+                                    color = bgColor,
+                                    shape = RoundedCornerShape(6.dp)
+                                ) {
+                                    Text(
+                                        text = desc,
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = textColor,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onDismiss,
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+            ) {
+                Text("Let's Go!", fontWeight = FontWeight.Bold)
+            }
+        }
+    )
+}
+
+@Preview(showBackground = true, name = "Role Selector Preview")
+@Composable
+fun RoleSelectorPreview() {
+    var selectedRole by remember { mutableStateOf("Donor") }
+    MyApplicationTheme {
+        Box(modifier = Modifier.padding(16.dp)) {
+            RoleSelector(
+                selectedRole = selectedRole,
+                onRoleSelected = { selectedRole = it }
+            )
         }
     }
 }

@@ -201,8 +201,8 @@ class FirebaseSyncManager(
             phone = data["phone"] as? String ?: "",
             email = data["email"] as? String ?: "",
             verified = data["verified"] as? Boolean ?: true,
-            size = data["size"] as? String ?: "Medium (100-500/wk)",
-            operatingHours = data["operatingHours"] as? String ?: "Mon-Fri 9 AM - 5 PM",
+            size = data["size"] as? String ?: "",
+            operatingHours = data["operatingHours"] as? String ?: "",
             coldStorage = data["coldStorage"] as? Boolean ?: false
         )
     }

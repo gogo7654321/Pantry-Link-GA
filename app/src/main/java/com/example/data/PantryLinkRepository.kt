@@ -130,4 +130,8 @@ class PantryLinkRepository(
         syncManager?.pushFoodBank(created)
         return id
     }
+
+    suspend fun deleteFoodBankByEmail(email: String) {
+        dao.deleteFoodBankByEmail(email)
+    }
 }

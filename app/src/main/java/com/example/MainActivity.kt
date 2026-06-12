@@ -14,6 +14,8 @@ import com.example.ui.PantryLinkViewModel
 import com.google.firebase.FirebaseApp
 
 class MainActivity : ComponentActivity() {
+    private lateinit var viewModel: PantryLinkViewModel
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
@@ -31,13 +33,20 @@ class MainActivity : ComponentActivity() {
         val repository = PantryLinkRepository(database.dao(), syncManager)
         
         // 2. Instantiate our Unified ViewModel
-        val viewModel = PantryLinkViewModel(repository, applicationContext)
+        viewModel = PantryLinkViewModel(repository, applicationContext)
         
         enableEdgeToEdge()
         setContent {
             MyApplicationTheme {
                 PantryLinkAppScreen(viewModel = viewModel)
             }
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (::viewModel.isInitialized) {
+            viewModel.refreshSessionAndProfile()
         }
     }
 }

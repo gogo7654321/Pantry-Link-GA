@@ -9,6 +9,16 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import java.io.IOException
+import com.example.BuildConfig
+
+data class DiagnosticItem(
+    val name: String,
+    val status: String, // "PENDING", "SUCCESS", "FAILURE"
+    val message: String
+)
 
 // Custom user session representation to handle both standard Firebase and graceful Offline/Demo fallbacks
 data class PantryUserSession(
@@ -25,6 +35,9 @@ class PantryLinkViewModel(private val repository: PantryLinkRepository, private 
 
     // Firebase Authentication instance
     private val auth: FirebaseAuth? = try { FirebaseAuth.getInstance() } catch (e: Exception) { null }
+
+    private val _diagnosticsState = MutableStateFlow<List<DiagnosticItem>?>(null)
+    val diagnosticsState: StateFlow<List<DiagnosticItem>?> = _diagnosticsState.asStateFlow()
 
     private val _userSession = MutableStateFlow<PantryUserSession?>(
         try {
@@ -45,9 +58,16 @@ class PantryLinkViewModel(private val repository: PantryLinkRepository, private 
     private val _currentUserProfile = MutableStateFlow<Map<String, Any>?>(null)
     val currentUserProfile: StateFlow<Map<String, Any>?> = _currentUserProfile.asStateFlow()
 
+    private val _showWelcomeRewardsDialog = MutableStateFlow(false)
+    val showWelcomeRewardsDialog: StateFlow<Boolean> = _showWelcomeRewardsDialog.asStateFlow()
+
+    fun dismissWelcomeRewardsDialog() {
+        _showWelcomeRewardsDialog.value = false
+    }
+
     // Getter for selected email (defaults to user email, or fallback)
     val currentUserEmail: String
-        get() = _userSession.value?.email ?: "npatel012010@gmail.com"
+        get() = _userSession.value?.email ?: ""
 
     // Roles: "Donor" or "Food Bank"
     private val _selectedRole = MutableStateFlow(
@@ -104,7 +124,7 @@ class PantryLinkViewModel(private val repository: PantryLinkRepository, private 
     // Live Claims flow, automatically reactively queries matching active user email
     val claimsState: StateFlow<List<ClaimEntity>> = _userSession
         .flatMapLatest { user ->
-            repository.getClaimsForDonor(user?.email ?: "npatel012010@gmail.com")
+            repository.getClaimsForDonor(user?.email ?: "")
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -125,9 +145,7 @@ class PantryLinkViewModel(private val repository: PantryLinkRepository, private 
     private val _pushNotificationsEnabled = MutableStateFlow(true)
     val pushNotificationsEnabled: StateFlow<Boolean> = _pushNotificationsEnabled.asStateFlow()
 
-    private val _savedLocations = MutableStateFlow(listOf(
-        SavedLocation(1, "Home Base", "12 Peachtree St, Atlanta", "30308")
-    ))
+    private val _savedLocations = MutableStateFlow<List<SavedLocation>>(emptyList())
     val savedLocations: StateFlow<List<SavedLocation>> = _savedLocations.asStateFlow()
 
     fun toggleEmailNotifications() {
@@ -190,8 +208,7 @@ class PantryLinkViewModel(private val repository: PantryLinkRepository, private 
         }
         val firebaseAuth = auth
         if (firebaseAuth == null) {
-            // Local fallback directly if Firebase Auth is not initialized/loaded in the SDK
-            logInLocalAccount(trimmedEmail, onResult, "Firebase not initialized")
+            onResult(false, "Authentication service is currently unavailable. Please check Firebase initialization.")
             return
         }
 
@@ -212,20 +229,11 @@ class PantryLinkViewModel(private val repository: PantryLinkRepository, private 
                         }
                     } else {
                         val exceptionMessage = task.exception?.localizedMessage ?: "Authentication failed."
-                        if (exceptionMessage.contains("api key", ignoreCase = true) || 
-                            exceptionMessage.contains("invalid", ignoreCase = true) ||
-                            exceptionMessage.contains("internal error", ignoreCase = true) ||
-                            exceptionMessage.contains("not valid", ignoreCase = true)) {
-                            
-                            // Elegant fallback if API Credentials are not configured!
-                            logInLocalAccount(trimmedEmail, onResult, exceptionMessage)
-                        } else {
-                            onResult(false, exceptionMessage)
-                        }
+                        onResult(false, exceptionMessage)
                     }
                 }
         } catch (e: Exception) {
-            logInLocalAccount(trimmedEmail, onResult, e.localizedMessage ?: "Exception")
+            onResult(false, e.localizedMessage ?: "Authentication error occurred.")
         }
     }
 
@@ -354,7 +362,7 @@ class PantryLinkViewModel(private val repository: PantryLinkRepository, private 
 
         val firebaseAuth = auth
         if (firebaseAuth == null) {
-            registerLocalAccount(trimmedEmail, role, details, onResult)
+            onResult(false, "Authentication service is currently unavailable. Please check Firebase initialization.")
             return
         }
 
@@ -414,26 +422,20 @@ class PantryLinkViewModel(private val repository: PantryLinkRepository, private 
                             }
                             
                             showToast("Registered successfully as $trimmedEmail")
+                            if (role == "Donor") {
+                                _showWelcomeRewardsDialog.value = true
+                            }
                             onResult(true, "Success")
                         } else {
                             onResult(false, "Failed to retrieve user session.")
                         }
                     } else {
                         val exceptionMessage = task.exception?.localizedMessage ?: "Failed to register."
-                        if (exceptionMessage.contains("api key", ignoreCase = true) || 
-                            exceptionMessage.contains("invalid", ignoreCase = true) ||
-                            exceptionMessage.contains("internal error", ignoreCase = true) ||
-                            exceptionMessage.contains("not valid", ignoreCase = true)) {
-                            
-                            // Backup fallback on credential error
-                            registerLocalAccount(trimmedEmail, role, details, onResult)
-                        } else {
-                            onResult(false, exceptionMessage)
-                        }
+                        onResult(false, exceptionMessage)
                     }
                 }
         } catch (e: Exception) {
-            registerLocalAccount(trimmedEmail, role, details, onResult)
+            onResult(false, e.localizedMessage ?: "Registration error occurred.")
         }
     }
 
@@ -459,8 +461,8 @@ class PantryLinkViewModel(private val repository: PantryLinkRepository, private 
             val fbAddress = details["fbAddress"] as? String ?: ""
             val fbZip = details["fbZip"] as? String ?: ""
             val fbCity = details["fbCity"] as? String ?: ""
-            val fbSize = details["fbSize"] as? String ?: "Medium (100-500/wk)"
-            val fbHours = details["fbHours"] as? String ?: "Mon-Fri 9 AM - 5 PM"
+            val fbSize = details["fbSize"] as? String ?: ""
+            val fbHours = details["fbHours"] as? String ?: ""
             val fbColdStorage = details["fbColdStorage"] as? Boolean ?: false
             val name = details["name"] as? String ?: "Community Food Bank"
             val phone = details["phone"] as? String ?: ""
@@ -480,6 +482,9 @@ class PantryLinkViewModel(private val repository: PantryLinkRepository, private 
         }
         
         showToast("Registered successfully as $email (Offline Mode)")
+        if (role == "Donor") {
+            _showWelcomeRewardsDialog.value = true
+        }
         onResult(true, "DemoSuccess")
     }
 
@@ -575,6 +580,69 @@ class PantryLinkViewModel(private val repository: PantryLinkRepository, private 
         showToast("Signed out successfully.")
     }
 
+    fun deleteUserAccount(onResult: (Boolean, String) -> Unit) {
+        val currentUser = auth?.currentUser
+        if (currentUser == null) {
+            onResult(false, "User session not found.")
+            return
+        }
+
+        val email = currentUser.email ?: ""
+        val uid = currentUser.uid
+        val role = _selectedRole.value
+
+        // 1. Delete user details from Firestore collection 'users'
+        FirebaseFirestore.getInstance().collection("users").document(uid).delete()
+            .addOnCompleteListener { firestoreTask ->
+                if (!firestoreTask.isSuccessful) {
+                    Log.e("PantryLinkAuth", "Failed to delete user profile in Firestore", firestoreTask.exception)
+                }
+                
+                // 2. If Food Bank, delete from 'food_banks' Firestore collection and Room DB
+                if (role == "Food Bank") {
+                    FirebaseFirestore.getInstance().collection("food_banks")
+                        .whereEqualTo("email", email)
+                        .get()
+                        .addOnCompleteListener { queryTask ->
+                            if (queryTask.isSuccessful && queryTask.result != null) {
+                                for (doc in queryTask.result.documents) {
+                                    doc.reference.delete()
+                                }
+                            } else {
+                                Log.e("PantryLinkAuth", "Failed to query food_banks collection for deletion", queryTask.exception)
+                            }
+                            
+                            // Delete locally in Room Database
+                            viewModelScope.launch {
+                                repository.deleteFoodBankByEmail(email)
+                                // 3. Delete from Firebase Auth
+                                deleteAuthUser(currentUser, onResult)
+                            }
+                        }
+                } else {
+                    // 3. Delete from Firebase Auth
+                    deleteAuthUser(currentUser, onResult)
+                }
+            }
+    }
+
+    private fun deleteAuthUser(currentUser: com.google.firebase.auth.FirebaseUser, onResult: (Boolean, String) -> Unit) {
+        currentUser.delete()
+            .addOnCompleteListener { task ->
+                if (task.isSuccessful) {
+                    signOutUser()
+                    onResult(true, "Success")
+                } else {
+                    val exception = task.exception
+                    if (exception is com.google.firebase.auth.FirebaseAuthRecentLoginRequiredException) {
+                        onResult(false, "Security requirement: Please sign out and sign back in to delete your account.")
+                    } else {
+                        onResult(false, exception?.localizedMessage ?: "Failed to delete Auth account.")
+                    }
+                }
+            }
+    }
+
     private fun saveUserProfileToFirestore(userProfile: Map<String, Any>) {
         if (_userSession.value?.isDemo == true) return
         val uid = _userSession.value?.uid ?: return
@@ -622,6 +690,27 @@ class PantryLinkViewModel(private val repository: PantryLinkRepository, private 
             Log.e("PantryLinkAuth", "Firestore not available for sync", e)
         }
     }
+
+    fun refreshSessionAndProfile() {
+        val currentUser = auth?.currentUser
+        if (currentUser != null) {
+            currentUser.reload()
+                .addOnCompleteListener { task ->
+                    if (!task.isSuccessful || auth?.currentUser == null) {
+                        Log.w("PantryLinkAuth", "Active Firebase Auth session invalid or user deleted. Signing out.")
+                        signOutUser()
+                    } else {
+                        syncUserProfile()
+                    }
+                }
+        } else {
+            if (_userSession.value != null && !_userSession.value!!.isDemo) {
+                Log.w("PantryLinkAuth", "Firebase Auth currentUser is null but local session exists. Clearing session.")
+                signOutUser()
+            }
+        }
+    }
+
 
     // Animated top banner for simulated device push notifications
     private val _activePushAlert = MutableStateFlow<String?>(null)
@@ -705,7 +794,7 @@ class PantryLinkViewModel(private val repository: PantryLinkRepository, private 
             null
         }
 
-        syncUserProfile()
+        refreshSessionAndProfile()
 
         // Sync list from Firestore "partner_food_banks" collection if available
         try {
@@ -986,6 +1075,126 @@ class PantryLinkViewModel(private val repository: PantryLinkRepository, private 
         dist = Math.toDegrees(dist)
         dist = dist * 60 * 1.1515
         return dist
+    }
+
+    fun clearDiagnostics() {
+        _diagnosticsState.value = null
+    }
+
+    fun runDiagnostics() {
+        val items = mutableListOf(
+            DiagnosticItem("Firebase Auth", "PENDING", "Verifying initialization..."),
+            DiagnosticItem("Firestore Database", "PENDING", "Verifying write & read connectivity..."),
+            DiagnosticItem("Google Places API", "PENDING", "Verifying API key and query response..."),
+            DiagnosticItem("Gemini API", "PENDING", "Verifying API key and models endpoint...")
+        )
+        _diagnosticsState.value = items.toList()
+
+        viewModelScope.launch {
+            // 1. Firebase Auth Check
+            try {
+                val firebaseAuth = auth ?: FirebaseAuth.getInstance()
+                if (firebaseAuth.app != null) {
+                    updateDiagnosticItem("Firebase Auth", "SUCCESS", "Connected (App ID: ${firebaseAuth.app.options.applicationId})")
+                } else {
+                    updateDiagnosticItem("Firebase Auth", "FAILURE", "FirebaseAuth.app is null.")
+                }
+            } catch (e: Exception) {
+                updateDiagnosticItem("Firebase Auth", "FAILURE", e.localizedMessage ?: "Auth initialization failed.")
+            }
+
+            // 2. Firestore DB Connection Check
+            try {
+                val db = FirebaseFirestore.getInstance()
+                val testDoc = db.collection("connection_check").document("test_write")
+                val testData = mapOf("test" to true, "timestamp" to System.currentTimeMillis())
+                
+                testDoc.set(testData)
+                    .addOnCompleteListener { writeTask ->
+                        if (writeTask.isSuccessful) {
+                            testDoc.get().addOnCompleteListener { readTask ->
+                                if (readTask.isSuccessful && readTask.result != null) {
+                                    updateDiagnosticItem("Firestore Database", "SUCCESS", "Read/Write verification passed successfully.")
+                                } else {
+                                    updateDiagnosticItem("Firestore Database", "FAILURE", "Write succeeded, but Read failed: ${readTask.exception?.localizedMessage}")
+                                }
+                                testDoc.delete()
+                            }
+                        } else {
+                            updateDiagnosticItem("Firestore Database", "FAILURE", "Write failed: ${writeTask.exception?.localizedMessage}")
+                        }
+                    }
+            } catch (e: Exception) {
+                updateDiagnosticItem("Firestore Database", "FAILURE", e.localizedMessage ?: "Database connection failed.")
+            }
+
+            // 3. Google Places API Check
+            try {
+                val placesKey = BuildConfig.PLACES_API_KEY
+                if (placesKey.isBlank() || placesKey.contains("PLACEHOLDER") || placesKey.contains("YOUR_") || placesKey.length < 10) {
+                    updateDiagnosticItem("Google Places API", "FAILURE", "Places API Key is missing or unconfigured.")
+                } else {
+                    val response = GooglePlacesClient.service.autocomplete(
+                        input = "Atlanta",
+                        apiKey = placesKey,
+                        components = "country:us"
+                    )
+                    if (response.status == "OK" || response.status == "ZERO_RESULTS") {
+                        updateDiagnosticItem("Google Places API", "SUCCESS", "API is active and responded successfully (${response.status}).")
+                    } else {
+                        updateDiagnosticItem("Google Places API", "FAILURE", "API returned status: ${response.status}")
+                    }
+                }
+            } catch (e: Exception) {
+                updateDiagnosticItem("Google Places API", "FAILURE", e.localizedMessage ?: "Autocomplete API request failed.")
+            }
+
+            // 4. Gemini API Check
+            try {
+                val geminiKey = BuildConfig.GEMINI_API_KEY
+                if (geminiKey.isBlank() || geminiKey.contains("PLACEHOLDER") || geminiKey.contains("YOUR_") || geminiKey.length < 10) {
+                    updateDiagnosticItem("Gemini API", "FAILURE", "Gemini API Key is missing or unconfigured.")
+                } else {
+                    val client = OkHttpClient()
+                    val request = Request.Builder()
+                        .url("https://generativelanguage.googleapis.com/v1beta/models?key=$geminiKey")
+                        .build()
+                    
+                    client.newCall(request).enqueue(object : okhttp3.Callback {
+                        override fun onFailure(call: okhttp3.Call, e: IOException) {
+                            updateDiagnosticItem("Gemini API", "FAILURE", e.localizedMessage ?: "Gemini HTTP request failed.")
+                        }
+
+                        override fun onResponse(call: okhttp3.Call, response: okhttp3.Response) {
+                            response.use { resp ->
+                                if (resp.isSuccessful) {
+                                    updateDiagnosticItem("Gemini API", "SUCCESS", "API key validated. Generative models endpoint is reachable.")
+                                } else {
+                                    val errBody = resp.body?.string() ?: ""
+                                    val errMsg = if (errBody.contains("API_KEY_INVALID", ignoreCase = true)) {
+                                        "API Key is invalid (Check Console credentials)."
+                                    } else {
+                                        "HTTP Error ${resp.code}: $errBody"
+                                    }
+                                    updateDiagnosticItem("Gemini API", "FAILURE", errMsg)
+                                }
+                            }
+                        }
+                    })
+                }
+            } catch (e: Exception) {
+                updateDiagnosticItem("Gemini API", "FAILURE", e.localizedMessage ?: "Gemini connection check failed.")
+            }
+        }
+    }
+
+    private fun updateDiagnosticItem(name: String, status: String, message: String) {
+        val currentList = _diagnosticsState.value?.toMutableList() ?: return
+        val index = currentList.indexOfFirst { it.name == name }
+        if (index != -1) {
+            currentList[index] = DiagnosticItem(name, status, message)
+            _diagnosticsState.value = currentList.toList()
+        }
     }
 }
 

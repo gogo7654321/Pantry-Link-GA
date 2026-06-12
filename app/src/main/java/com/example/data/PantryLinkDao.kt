@@ -16,6 +16,9 @@ interface PantryLinkDao {
     @Query("SELECT * FROM food_banks WHERE id = :id LIMIT 1")
     suspend fun getFoodBankById(id: Int): FoodBankEntity?
 
+    @Query("DELETE FROM food_banks WHERE email = :email")
+    suspend fun deleteFoodBankByEmail(email: String)
+
 
     // --- Requests ---
     @Query("SELECT * FROM requests ORDER BY id DESC")
